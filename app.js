@@ -395,6 +395,7 @@
           <p class="eyebrow">Scenario ${label}</p>
           <div class="summary-grid">${summaryCards}</div>
         </div>
+        ${renderChartsMarkup(result)}
         ${renderHowItWorksMarkup(result)}
         ${renderFlowMarkup(result)}
         <table class="breakdown-table">
@@ -432,12 +433,140 @@
     return `
       <section class="info-box">
         <p class="eyebrow">How it works</p>
-        <p class="info-title">Company tax happens before dividend extraction.</p>
+        <p class="info-title">Director pay flows through the company first, then the individual.</p>
         <p class="info-copy">
-          Start with company profit, deduct salary, employer pension and company expenses to reach taxable profit, then apply corporation tax.
-          Dividends are only paid from the ${formatCurrency(result.postTaxProfit)} left after corporation tax, so they do not reduce corporation tax.
+          This simulator models the UK director tax flow from company profit through to personal take-home.
+          Salary, employer pension and company costs reduce company profit before corporation tax is worked out, while dividends are paid from post-tax profit and do not reduce corporation tax.
+          Personal income tax is then assessed across salary, dividends and other taxable income together.
+          Use the sliders to test different extraction mixes and compare scenarios.
         </p>
       </section>
+    `;
+  }
+
+  function renderChartsMarkup(result) {
+    const taxBreakdown = buildTaxBreakdownChartData(result);
+    const taxWedge = buildTaxWedgeChartData(result);
+
+    return `
+      <section class="charts-grid">
+        <article class="chart-card">
+          <div class="chart-header">
+            <div>
+              <p class="eyebrow">Visualisation</p>
+              <h3>Tax breakdown</h3>
+            </div>
+            <p class="chart-caption">Split across each major tax layer.</p>
+          </div>
+          <div class="pie-chart-layout">
+            ${renderPieChart(taxBreakdown)}
+            ${renderChartLegend(taxBreakdown, "Tax amounts")}
+          </div>
+        </article>
+        <article class="chart-card">
+          <div class="chart-header">
+            <div>
+              <p class="eyebrow">Visualisation</p>
+              <h3>Tax wedge</h3>
+            </div>
+            <p class="chart-caption">How total economic value splits between take-home and all taxes.</p>
+          </div>
+          ${renderTaxWedgeBar(taxWedge)}
+          ${renderChartLegend(taxWedge, "Share of total value")}
+        </article>
+      </section>
+    `;
+  }
+
+  function buildTaxBreakdownChartData(result) {
+    const slices = [
+      { label: "Corporation Tax", value: result.corporationTax.tax, color: "#eb5e28" },
+      { label: "Employer NI", value: result.employerNi, color: "#0b8f66" },
+      { label: "Income Tax", value: result.incomeTax.total, color: "#ffbe0b" },
+      { label: "Dividend Tax", value: result.dividendTax.total, color: "#3a86ff" },
+      { label: "Employee NI", value: result.employeeNi, color: "#fb5607" }
+    ];
+    return addChartPercentages(slices);
+  }
+
+  function buildTaxWedgeChartData(result) {
+    const segments = [
+      { label: "Take-home", value: result.netTakeHome, color: "#0b8f66" },
+      { label: "All taxes", value: result.totalTax, color: "#eb5e28" }
+    ];
+    return addChartPercentages(segments);
+  }
+
+  function addChartPercentages(items) {
+    const total = items.reduce((sum, item) => sum + item.value, 0);
+    return items.map((item) => ({
+      ...item,
+      percentage: total > 0 ? item.value / total : 0
+    }));
+  }
+
+  function renderPieChart(items) {
+    const radius = 64;
+    const circumference = 2 * Math.PI * radius;
+    let progress = 0;
+    const slices = items.map((item) => {
+      const length = item.percentage * circumference;
+      const dasharray = `${length} ${Math.max(0, circumference - length)}`;
+      const dashoffset = -progress * circumference;
+      progress += item.percentage;
+      return `<circle class="pie-slice" cx="80" cy="80" r="${radius}" fill="none" stroke="${item.color}" stroke-width="32" stroke-dasharray="${dasharray}" stroke-dashoffset="${dashoffset}" transform="rotate(-90 80 80)"></circle>`;
+    }).join("");
+    const totalLabel = formatCurrency(items.reduce((sum, item) => sum + item.value, 0));
+
+    return `
+      <div class="pie-chart-shell">
+        <svg class="pie-chart" viewBox="0 0 160 160" role="img" aria-label="Tax breakdown pie chart">
+          <circle cx="80" cy="80" r="${radius}" fill="none" stroke="#efe1c7" stroke-width="32"></circle>
+          ${slices}
+          <circle cx="80" cy="80" r="40" fill="#ffffff"></circle>
+        </svg>
+        <div class="pie-chart-center">
+          <span class="chart-center-label">Total tax</span>
+          <strong class="chart-center-value">${totalLabel}</strong>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderTaxWedgeBar(items) {
+    const segments = items.map((item) => `
+      <div
+        class="tax-wedge-segment"
+        style="width: ${Math.max(item.percentage * 100, item.value > 0 ? 1.5 : 0)}%; background: ${item.color};"
+        title="${item.label}: ${formatCurrency(item.value)}"
+      >
+        <span>${item.label}</span>
+      </div>
+    `).join("");
+
+    return `
+      <div class="tax-wedge-card">
+        <div class="tax-wedge-bar" role="img" aria-label="Horizontal stacked bar showing take-home versus taxes">
+          ${segments}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderChartLegend(items, title) {
+    return `
+      <div class="chart-legend">
+        <p class="chart-legend-title">${title}</p>
+        <div class="chart-legend-list">
+          ${items.map((item) => `
+            <div class="chart-legend-item">
+              <span class="chart-swatch" style="background: ${item.color};"></span>
+              <span class="chart-legend-label">${item.label}</span>
+              <span class="chart-legend-value">${formatCurrency(item.value)} · ${formatPercent(item.percentage)}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
     `;
   }
 
@@ -952,6 +1081,8 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       TAX_YEARS,
+      buildTaxBreakdownChartData,
+      buildTaxWedgeChartData,
       calculateScenario,
       calculateDividendTax,
       calculateIncomeTax,
