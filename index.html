@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UK Personal Tax Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">UK 2024/25 to 2026/27</p>
+        <h1>Personal Tax Simulator</h1>
+        <p class="hero-copy">
+          Model salary, dividends, pensions, electric vehicle benefits, mileage and deductions for a UK company director.
+        </p>
+      </div>
+      <div class="hero-actions">
+        <label class="field">
+          <span>Tax year</span>
+          <select id="taxYear"></select>
+        </label>
+        <button id="shareScenario" class="button button-primary" type="button">Copy shareable URL</button>
+      </div>
+    </header>
+
+    <main class="app-grid">
+      <section class="results-panel panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Results</p>
+            <h2>What this scenario produces</h2>
+          </div>
+          <div class="toggle-group">
+            <button id="singleModeButton" class="button button-secondary is-active" type="button">Single</button>
+            <button id="comparisonModeButton" class="button button-secondary" type="button">Compare</button>
+          </div>
+        </div>
+
+        <div id="singleResults" class="results-mode"></div>
+
+        <div id="comparisonResults" class="results-mode hidden">
+          <div class="comparison-grid">
+            <div id="comparisonResultsA"></div>
+            <div id="comparisonResultsB"></div>
+          </div>
+          <div id="comparisonDelta" class="delta-panel"></div>
+        </div>
+      </section>
+
+      <section class="inputs-panel panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Inputs</p>
+            <h2>Scenario builder</h2>
+          </div>
+          <div class="preset-bar">
+            <label for="presetSelect" class="sr-only">Load preset</label>
+            <select id="presetSelect">
+              <option value="">Load preset</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="scenario-tabs">
+          <button id="scenarioTabA" class="button button-secondary is-active" type="button">Scenario A</button>
+          <button id="scenarioTabB" class="button button-secondary hidden" type="button">Scenario B</button>
+        </div>
+
+        <form id="scenarioForm" class="input-sections">
+          <div id="primaryInputs"></div>
+          <details class="advanced-panel">
+            <summary>Advanced inputs</summary>
+            <div id="advancedInputs"></div>
+          </details>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <template id="summaryCardTemplate">
+    <article class="summary-card">
+      <p class="summary-label"></p>
+      <p class="summary-value"></p>
+      <p class="summary-note"></p>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
