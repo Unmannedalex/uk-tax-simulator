@@ -537,10 +537,11 @@
     const segments = items.map((item) => `
       <div
         class="tax-wedge-segment"
-        style="width: ${Math.max(item.percentage * 100, item.value > 0 ? 1.5 : 0)}%; background: ${item.color};"
+        style="flex: ${Math.max(item.percentage * 100, item.value > 0 ? 8 : 0)}; background: ${item.color};"
         title="${item.label}: ${formatCurrency(item.value)}"
       >
-        <span>${item.label}</span>
+        <span class="tax-wedge-label">${item.label}</span>
+        <span class="tax-wedge-value">${formatPercent(item.percentage)}</span>
       </div>
     `).join("");
 
