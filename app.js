@@ -364,8 +364,8 @@
     const summaryCards = [
       { label: "Net take-home", value: formatCurrency(result.netTakeHome), note: "After income tax, NI, dividend tax and personal pension." },
       { label: "Total tax", value: formatCurrency(result.totalTax), note: "Income tax, dividend tax, employee NI, employer NI and corporation tax." },
-      { label: "Effective tax rate", value: formatPercent(result.effectiveTaxRate), note: `Gross income ${formatCurrency(result.grossIncome)}.` },
-      { label: "Marginal rate", value: formatPercent(result.marginalRate), note: "Estimated on the next £1 earned." }
+      { label: "Effective tax rate", value: formatPercent(result.effectiveTaxRate), note: `Gross economic value ${formatCurrency(result.grossIncome)}.` },
+      { label: "Marginal rate", value: formatPercent(result.marginalRate), note: "Estimated on the next £1 of company profit extracted." }
     ].map(renderSummaryCard).join("");
 
     const taxRows = [
@@ -382,6 +382,9 @@
     ].join("");
 
     const suggestions = result.optimisationSuggestions.map((item) => `<li>${item}</li>`).join("");
+    const warnings = result.warnings.length
+      ? `<div><p class="eyebrow">Scenario warnings</p><ul class="warning-list">${result.warnings.map((item) => `<li>${item}</li>`).join("")}</ul></div>`
+      : "";
 
     return `
       <section class="metrics-section">
@@ -400,7 +403,11 @@
         <table class="breakdown-table">
           <thead><tr><th>Take-home summary</th><th>Amount</th></tr></thead>
           <tbody>
-            <tr><td>Gross income</td><td>${formatCurrency(result.grossIncome)}</td></tr>
+            <tr><td>Salary after sacrifice</td><td>${formatCurrency(result.salaryAfterSacrifice)}</td></tr>
+            <tr><td>Dividends used in model</td><td>${formatCurrency(result.actualDividends)}</td></tr>
+            <tr><td>Tax-free mileage claim</td><td>${formatCurrency(result.mileageClaim)}</td></tr>
+            <tr><td>Other personal income</td><td>${formatCurrency(result.personalOtherIncome)}</td></tr>
+            <tr><td>Gross economic value</td><td>${formatCurrency(result.grossIncome)}</td></tr>
             <tr><td>Income tax</td><td>${formatCurrency(result.incomeTax.total)}</td></tr>
             <tr><td>Employee NI</td><td>${formatCurrency(result.employeeNi)}</td></tr>
             <tr><td>Dividend tax</td><td>${formatCurrency(result.dividendTax.total)}</td></tr>
@@ -408,6 +415,16 @@
             <tr><td>Net take-home</td><td>${formatCurrency(result.netTakeHome)}</td></tr>
           </tbody>
         </table>
+        <table class="breakdown-table">
+          <thead><tr><th>Company position</th><th>Amount</th></tr></thead>
+          <tbody>
+            <tr><td>Taxable profit after deductions</td><td>${formatCurrency(result.taxableProfit)}</td></tr>
+            <tr><td>Corporation tax rate</td><td>${formatPercent(result.corporationTax.rate)}</td></tr>
+            <tr><td>Post-tax profits available for dividends</td><td>${formatCurrency(result.maxDividendsAvailable)}</td></tr>
+            <tr><td>Undistributed post-tax profits</td><td>${formatCurrency(result.undistributedProfit)}</td></tr>
+          </tbody>
+        </table>
+        ${warnings}
         <div>
           <p class="eyebrow">Optimisation suggestions</p>
           <ul class="suggestion-list">${suggestions}</ul>
@@ -441,47 +458,39 @@
     `;
   }
 
-  function calculateScenario(inputs, config) {
+  function calculateScenario(inputs, config, options = {}) {
     const salaryAfterSacrifice = Math.max(0, inputs.salary - inputs.evSalarySacrifice);
     const evBenefit = inputs.evListPrice * config.evBikRate;
     const mileageClaim = calculateMileageClaim(inputs.businessMiles, config);
-    const grossTaxableIncome = salaryAfterSacrifice + evBenefit + inputs.interestIncome + inputs.rentalIncome + inputs.otherIncome;
-    const adjustedNetIncome = Math.max(0, grossTaxableIncome + inputs.dividends - grossedUpPersonalPension(inputs.pensionPersonal) - inputs.giftAid);
-    const personalAllowanceBase = calculatePersonalAllowance(config, adjustedNetIncome) + inputs.personalAllowanceTransfer;
-    const personalAllowance = Math.max(0, Math.min(config.personalAllowance, personalAllowanceBase));
-    const basicBandExtension = grossedUpPersonalPension(inputs.pensionPersonal) + inputs.giftAid;
-    const incomeTax = calculateIncomeTax(
-      grossTaxableIncome,
-      personalAllowance,
-      config,
-      basicBandExtension
-    );
     const employeeNi = calculateEmployeeNi(salaryAfterSacrifice, config);
     const employerNi = calculateEmployerNi(salaryAfterSacrifice, config);
-    const dividendTax = calculateDividendTax(inputs.dividends, grossTaxableIncome, personalAllowance, config, basicBandExtension);
-
     const deductibleExpenses = inputs.otherDeductions + inputs.professionalSubscriptions + inputs.pensionEmployer + inputs.evLeaseCost + mileageClaim + salaryAfterSacrifice + employerNi;
     const taxableProfit = Math.max(0, inputs.companyProfit - deductibleExpenses);
     const corporationTax = calculateCorporationTax(taxableProfit, config);
-
-    const grossIncome = salaryAfterSacrifice + inputs.dividends + evBenefit + inputs.interestIncome + inputs.rentalIncome + inputs.otherIncome;
+    const maxDividendsAvailable = Math.max(0, taxableProfit - corporationTax.tax);
+    const actualDividends = Math.min(inputs.dividends, maxDividendsAvailable);
+    const personalOtherIncome = inputs.interestIncome + inputs.rentalIncome + inputs.otherIncome;
+    const grossTaxableIncome = salaryAfterSacrifice + evBenefit + personalOtherIncome;
+    const adjustedNetIncome = Math.max(0, grossTaxableIncome + actualDividends - grossedUpPersonalPension(inputs.pensionPersonal) - inputs.giftAid);
+    const personalAllowanceBase = calculatePersonalAllowance(config, adjustedNetIncome) + Math.min(1260, inputs.personalAllowanceTransfer);
+    const personalAllowance = Math.max(0, Math.min(config.personalAllowance, personalAllowanceBase));
+    const basicBandExtension = grossedUpPersonalPension(inputs.pensionPersonal) + inputs.giftAid;
+    const incomeTax = calculateIncomeTax(grossTaxableIncome, personalAllowance, config, basicBandExtension);
+    const dividendTax = calculateDividendTax(actualDividends, grossTaxableIncome, personalAllowance, config, basicBandExtension);
+    const grossIncome = salaryAfterSacrifice + actualDividends + personalOtherIncome + mileageClaim + inputs.pensionEmployer + evBenefit;
+    const cashTakeHomeBeforeTax = salaryAfterSacrifice + actualDividends + personalOtherIncome + mileageClaim;
     const totalTax = incomeTax.total + dividendTax.total + employeeNi + employerNi + corporationTax.tax;
-    const netTakeHome = grossIncome - incomeTax.total - employeeNi - dividendTax.total - inputs.pensionPersonal;
+    const netTakeHome = cashTakeHomeBeforeTax - incomeTax.total - employeeNi - dividendTax.total - inputs.pensionPersonal;
     const effectiveTaxRate = grossIncome > 0 ? totalTax / grossIncome : 0;
-    const marginalRate = estimateMarginalRate(inputs, config);
-    const optimisationSuggestions = buildSuggestions(inputs, config, {
+    const undistributedProfit = Math.max(0, maxDividendsAvailable - actualDividends);
+    const warnings = buildWarnings(inputs, config, {
       salaryAfterSacrifice,
-      employeeNi,
-      employerNi,
-      corporationTax,
-      dividendTax,
-      grossTaxableIncome,
-      netTakeHome,
-      taxableProfit,
-      totalTax
+      maxDividendsAvailable,
+      actualDividends,
+      taxableProfit
     });
 
-    return {
+    const result = {
       inputs,
       incomeTax,
       dividendTax,
@@ -490,14 +499,27 @@
       corporationTax,
       mileageClaim,
       evBenefit,
+      salaryAfterSacrifice,
+      actualDividends,
+      maxDividendsAvailable,
+      undistributedProfit,
+      personalOtherIncome,
       grossIncome,
+      cashTakeHomeBeforeTax,
       netTakeHome,
       totalTax,
       effectiveTaxRate,
-      marginalRate,
       taxableProfit,
-      optimisationSuggestions
+      warnings
     };
+
+    if (options.skipEnhancements) {
+      return { ...result, marginalRate: 0, optimisationSuggestions: [] };
+    }
+
+    result.marginalRate = estimateMarginalRate(inputs, config);
+    result.optimisationSuggestions = buildSuggestions(inputs, config, result);
+    return result;
   }
 
   function calculateIncomeTax(income, personalAllowance, config, basicBandExtension) {
@@ -551,15 +573,19 @@
 
   function calculateCorporationTax(profit, config) {
     let rate;
+    let tax;
     if (profit <= config.corpTaxLowerThreshold) {
       rate = config.corpTaxSmallRate;
+      tax = profit * rate;
     } else if (profit >= config.corpTaxUpperThreshold) {
       rate = config.corpTaxMainRate;
+      tax = profit * rate;
     } else {
-      const marginalFraction = (profit - config.corpTaxLowerThreshold) / (config.corpTaxUpperThreshold - config.corpTaxLowerThreshold);
-      rate = config.corpTaxSmallRate + ((config.corpTaxMainRate - config.corpTaxSmallRate) * marginalFraction);
+      const marginalRelief = (config.corpTaxUpperThreshold - profit) * (3 / 200);
+      tax = (profit * config.corpTaxMainRate) - marginalRelief;
+      rate = tax / profit;
     }
-    return { rate, tax: profit * rate };
+    return { rate, tax };
   }
 
   function calculateMileageClaim(miles, config) {
@@ -575,50 +601,38 @@
   }
 
   function estimateMarginalRate(inputs, config) {
-    const current = calculateScenarioWithGuard(inputs, config);
-    const next = calculateScenarioWithGuard({ ...inputs, dividends: inputs.dividends + 1 }, config);
+    const current = calculateScenario(inputs, config, { skipEnhancements: true });
+    const next = calculateScenario({
+      ...inputs,
+      companyProfit: inputs.companyProfit + 1,
+      dividends: inputs.dividends + 1
+    }, config, { skipEnhancements: true });
     const taxDelta = next.totalTax - current.totalTax;
     return Math.max(0, Math.min(1, taxDelta));
   }
 
-  function calculateScenarioWithGuard(inputs, config) {
-    const result = calculateScenarioCore(inputs, config);
-    return result;
-  }
-
-  function calculateScenarioCore(inputs, config) {
-    const salaryAfterSacrifice = Math.max(0, inputs.salary - inputs.evSalarySacrifice);
-    const evBenefit = inputs.evListPrice * config.evBikRate;
-    const mileageClaim = calculateMileageClaim(inputs.businessMiles, config);
-    const grossTaxableIncome = salaryAfterSacrifice + evBenefit + inputs.interestIncome + inputs.rentalIncome + inputs.otherIncome;
-    const adjustedNetIncome = Math.max(0, grossTaxableIncome + inputs.dividends - grossedUpPersonalPension(inputs.pensionPersonal) - inputs.giftAid);
-    const personalAllowanceBase = calculatePersonalAllowance(config, adjustedNetIncome) + inputs.personalAllowanceTransfer;
-    const personalAllowance = Math.max(0, Math.min(config.personalAllowance, personalAllowanceBase));
-    const basicBandExtension = grossedUpPersonalPension(inputs.pensionPersonal) + inputs.giftAid;
-    const incomeTax = calculateIncomeTax(grossTaxableIncome, personalAllowance, config, basicBandExtension);
-    const employeeNi = calculateEmployeeNi(salaryAfterSacrifice, config);
-    const employerNi = calculateEmployerNi(salaryAfterSacrifice, config);
-    const dividendTax = calculateDividendTax(inputs.dividends, grossTaxableIncome, personalAllowance, config, basicBandExtension);
-    const deductibleExpenses = inputs.otherDeductions + inputs.professionalSubscriptions + inputs.pensionEmployer + inputs.evLeaseCost + mileageClaim + salaryAfterSacrifice + employerNi;
-    const taxableProfit = Math.max(0, inputs.companyProfit - deductibleExpenses);
-    const corporationTax = calculateCorporationTax(taxableProfit, config);
-    const grossIncome = salaryAfterSacrifice + inputs.dividends + evBenefit + inputs.interestIncome + inputs.rentalIncome + inputs.otherIncome;
-    const totalTax = incomeTax.total + dividendTax.total + employeeNi + employerNi + corporationTax.tax;
-    return { totalTax, grossIncome, taxableProfit, corporationTax, employeeNi, employerNi };
+  function buildWarnings(inputs, config, context) {
+    const warnings = [];
+    if (inputs.dividends > context.actualDividends) {
+      warnings.push(`Requested dividends exceed post-tax profit capacity by ${formatCurrency(inputs.dividends - context.actualDividends)}. Results cap dividends at ${formatCurrency(context.actualDividends)}.`);
+    }
+    if (inputs.evSalarySacrifice > inputs.salary) {
+      warnings.push("EV salary sacrifice exceeds salary. The model floors salary after sacrifice at zero.");
+    }
+    if (inputs.pensionEmployer + grossedUpPersonalPension(inputs.pensionPersonal) > config.pensionAnnualAllowance) {
+      warnings.push(`Combined pension input exceeds the simplified annual allowance of ${formatCurrency(config.pensionAnnualAllowance)}.`);
+    }
+    if (context.taxableProfit === 0 && inputs.companyProfit > 0) {
+      warnings.push("Company taxable profit has been fully relieved by salary, pension, mileage and deductions.");
+    }
+    return warnings;
   }
 
   function buildSuggestions(inputs, config, context) {
     const suggestions = [];
-    const niThresholdGap = Math.max(0, config.employeeNiThreshold - context.salaryAfterSacrifice);
-    if (niThresholdGap > 0 && niThresholdGap <= 5000) {
-      suggestions.push(`Increase salary by ${formatCurrency(niThresholdGap)} to reach the employee NI threshold if you want a higher qualifying salary without employee NI.`);
-    }
-
-    const salaryAboveThreshold = Math.max(0, context.salaryAfterSacrifice - config.employeeNiThreshold);
-    if (salaryAboveThreshold > 0) {
-      const salaryReset = Math.min(salaryAboveThreshold, 5000);
-      const niSaving = salaryReset * (config.employeeNiMainRate + config.employerNiRate);
-      suggestions.push(`Reducing salary by ${formatCurrency(salaryReset)} and replacing it with dividends could cut NI by about ${formatCurrency(niSaving)} before corporation tax effects.`);
+    const optimalSalary = findOptimalSalary(inputs, config);
+    if (Math.abs(optimalSalary.salary - inputs.salary) >= 100) {
+      suggestions.push(`Scanned salary checkpoints suggest ${formatCurrency(optimalSalary.salary)} is the strongest extraction point here, improving take-home by about ${formatCurrency(optimalSalary.delta)}.`);
     }
 
     const pensionRoom = Math.max(0, config.pensionAnnualAllowance - (inputs.pensionEmployer + grossedUpPersonalPension(inputs.pensionPersonal)));
@@ -631,25 +645,51 @@
     }
 
     if (inputs.evListPrice > 0 && inputs.evSalarySacrifice === 0) {
-      const salarySacrificeExample = Math.min(6000, Math.max(0, context.salaryAfterSacrifice));
-      const saving = salarySacrificeExample * (config.employeeNiMainRate + 0.2);
-      suggestions.push(`Consider salary sacrifice for the EV. Sacrificing ${formatCurrency(salarySacrificeExample)} could save roughly ${formatCurrency(saving)} of personal tax and NI before BIK.`);
+      const salarySacrificeExample = Math.min(6000, Math.max(0, inputs.salary));
+      const withSacrifice = calculateScenario({
+        ...inputs,
+        evSalarySacrifice: salarySacrificeExample
+      }, config, { skipEnhancements: true });
+      const saving = withSacrifice.netTakeHome - context.netTakeHome;
+      suggestions.push(`Consider EV salary sacrifice. Using ${formatCurrency(salarySacrificeExample)} here changes net take-home by about ${formatSignedCurrency(saving)} after BIK.`);
     }
 
     if (inputs.businessMiles > 0) {
       suggestions.push(`Business mileage relief worth ${formatCurrency(calculateMileageClaim(inputs.businessMiles, config))} is already reducing company profit. Keep this only for a personal vehicle.`);
     }
 
-    if (inputs.dividends > 0) {
-      const altProfit = calculateScenarioCore({ ...inputs, dividends: Math.max(0, inputs.dividends - 1000), salary: inputs.salary + 1000 }, config);
-      const current = calculateScenarioCore(inputs, config);
-      const delta = altProfit.totalTax - current.totalTax;
+    const comparisonStep = 1000;
+    if (inputs.dividends >= comparisonStep) {
+      const altMix = calculateScenario({
+        ...inputs,
+        salary: inputs.salary + comparisonStep,
+        dividends: Math.max(0, inputs.dividends - comparisonStep)
+      }, config, { skipEnhancements: true });
+      const delta = altMix.totalTax - context.totalTax;
       suggestions.push(delta < 0
-        ? `Replacing the next ${formatCurrency(1000)} of dividends with salary appears cheaper by about ${formatCurrency(Math.abs(delta))}.`
-        : `Keeping the next ${formatCurrency(1000)} as dividends appears cheaper than salary by about ${formatCurrency(Math.abs(delta))}.`);
+        ? `Replacing the next ${formatCurrency(comparisonStep)} of dividends with salary appears cheaper by about ${formatCurrency(Math.abs(delta))}.`
+        : `Keeping the next ${formatCurrency(comparisonStep)} as dividends appears cheaper than salary by about ${formatCurrency(Math.abs(delta))}.`);
     }
 
     return suggestions.slice(0, 5);
+  }
+
+  function findOptimalSalary(inputs, config) {
+    const extractionTarget = inputs.salary + inputs.dividends;
+    const salaryCandidates = [0, config.employerNiThreshold, config.employeeNiThreshold, config.employeeNiUpper]
+      .filter((value, index, values) => values.indexOf(value) === index);
+    const baseline = calculateScenario(inputs, config, { skipEnhancements: true });
+    const outcomes = salaryCandidates.map((salary) => {
+      const adjustedInputs = {
+        ...inputs,
+        salary,
+        dividends: Math.max(0, extractionTarget - salary)
+      };
+      const result = calculateScenario(adjustedInputs, config, { skipEnhancements: true });
+      return { salary, netTakeHome: result.netTakeHome };
+    });
+    const best = outcomes.reduce((winner, candidate) => candidate.netTakeHome > winner.netTakeHome ? candidate : winner, outcomes[0]);
+    return { salary: best.salary, delta: best.netTakeHome - baseline.netTakeHome };
   }
 
   function copyShareableUrl() {

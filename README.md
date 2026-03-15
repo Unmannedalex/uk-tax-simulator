@@ -20,6 +20,7 @@ Open `index.html` in a browser. All calculations run locally in the browser; no 
 - Shareable URL export
 - Tax year selector for 2024/25, 2025/26 and 2026/27
 - Mobile-responsive layout
+- Dividend requests are capped to post-corporation-tax profit capacity and flagged in the UI
 
 ## Notes
 
