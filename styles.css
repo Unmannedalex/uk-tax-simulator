@@ -250,7 +250,7 @@ label span,
 
 .pie-chart-layout {
   display: grid;
-  grid-template-columns: minmax(180px, 220px) 1fr;
+  grid-template-columns: 1fr;
   gap: 1rem;
   align-items: center;
 }
@@ -563,10 +563,6 @@ label span,
   .summary-grid,
   .position-grid,
   .flow-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .pie-chart-layout {
     grid-template-columns: 1fr;
   }
 
