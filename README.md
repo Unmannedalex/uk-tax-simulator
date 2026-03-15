@@ -27,4 +27,5 @@ Open `index.html` in a browser. All calculations run locally in the browser; no 
 - The calculator is an optimisation aid, not filed advice.
 - 2026/27 currently uses the same published assumptions as 2025/26 where future official rates are not yet locked in.
 - Pension tapering for adjusted income above annual allowance thresholds is simplified.
-- Dividend availability is not capped by post-tax reserves; the tool highlights tax effects from user-entered amounts.
+- Dividend availability is capped to estimated post-corporation-tax reserves for the current year only.
+- Marriage allowance is simplified to the basic-rate recipient reducer and ignored outside that case.

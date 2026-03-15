@@ -378,6 +378,7 @@
 
     const bandRows = [
       ...result.incomeTax.bands.map((band) => `<tr><td>Income tax ${band.name}</td><td>${formatCurrency(band.tax)}</td></tr>`),
+      `<tr><td>Marriage allowance reducer</td><td>${formatSignedCurrency(-result.marriageAllowanceReducer)}</td></tr>`,
       ...result.dividendTax.bands.map((band) => `<tr><td>Dividend tax ${band.name}</td><td>${formatCurrency(band.tax)}</td></tr>`)
     ].join("");
 
@@ -409,6 +410,7 @@
             <tr><td>Other personal income</td><td>${formatCurrency(result.personalOtherIncome)}</td></tr>
             <tr><td>Gross economic value</td><td>${formatCurrency(result.grossIncome)}</td></tr>
             <tr><td>Income tax</td><td>${formatCurrency(result.incomeTax.total)}</td></tr>
+            <tr><td>Marriage allowance reducer</td><td>${formatCurrency(result.marriageAllowanceReducer)}</td></tr>
             <tr><td>Employee NI</td><td>${formatCurrency(result.employeeNi)}</td></tr>
             <tr><td>Dividend tax</td><td>${formatCurrency(result.dividendTax.total)}</td></tr>
             <tr><td>Personal pension</td><td>${formatCurrency(result.inputs.pensionPersonal)}</td></tr>
@@ -472,11 +474,12 @@
     const personalOtherIncome = inputs.interestIncome + inputs.rentalIncome + inputs.otherIncome;
     const grossTaxableIncome = salaryAfterSacrifice + evBenefit + personalOtherIncome;
     const adjustedNetIncome = Math.max(0, grossTaxableIncome + actualDividends - grossedUpPersonalPension(inputs.pensionPersonal) - inputs.giftAid);
-    const personalAllowanceBase = calculatePersonalAllowance(config, adjustedNetIncome) + Math.min(1260, inputs.personalAllowanceTransfer);
-    const personalAllowance = Math.max(0, Math.min(config.personalAllowance, personalAllowanceBase));
+    const personalAllowance = Math.max(0, Math.min(config.personalAllowance, calculatePersonalAllowance(config, adjustedNetIncome)));
     const basicBandExtension = grossedUpPersonalPension(inputs.pensionPersonal) + inputs.giftAid;
     const incomeTax = calculateIncomeTax(grossTaxableIncome, personalAllowance, config, basicBandExtension);
     const dividendTax = calculateDividendTax(actualDividends, grossTaxableIncome, personalAllowance, config, basicBandExtension);
+    const marriageAllowanceReducer = calculateMarriageAllowanceReducer(inputs, config, grossTaxableIncome + actualDividends, basicBandExtension);
+    incomeTax.total = Math.max(0, incomeTax.total - marriageAllowanceReducer);
     const grossIncome = salaryAfterSacrifice + actualDividends + personalOtherIncome + mileageClaim + inputs.pensionEmployer + evBenefit;
     const cashTakeHomeBeforeTax = salaryAfterSacrifice + actualDividends + personalOtherIncome + mileageClaim;
     const totalTax = incomeTax.total + dividendTax.total + employeeNi + employerNi + corporationTax.tax;
@@ -487,7 +490,8 @@
       salaryAfterSacrifice,
       maxDividendsAvailable,
       actualDividends,
-      taxableProfit
+      taxableProfit,
+      marriageAllowanceReducer
     });
 
     const result = {
@@ -504,6 +508,7 @@
       maxDividendsAvailable,
       undistributedProfit,
       personalOtherIncome,
+      marriageAllowanceReducer,
       grossIncome,
       cashTakeHomeBeforeTax,
       netTakeHome,
@@ -611,6 +616,13 @@
     return Math.max(0, Math.min(1, taxDelta));
   }
 
+  function calculateMarriageAllowanceReducer(inputs, config, totalIncome, basicBandExtension) {
+    if (!inputs.personalAllowanceTransfer) return 0;
+    const basicRateCeiling = config.incomeBands[0].upper + basicBandExtension;
+    if (totalIncome > basicRateCeiling) return 0;
+    return Math.min(1260, inputs.personalAllowanceTransfer) * 0.2;
+  }
+
   function buildWarnings(inputs, config, context) {
     const warnings = [];
     if (inputs.dividends > context.actualDividends) {
@@ -621,6 +633,9 @@
     }
     if (inputs.pensionEmployer + grossedUpPersonalPension(inputs.pensionPersonal) > config.pensionAnnualAllowance) {
       warnings.push(`Combined pension input exceeds the simplified annual allowance of ${formatCurrency(config.pensionAnnualAllowance)}.`);
+    }
+    if (inputs.personalAllowanceTransfer > 0 && context.marriageAllowanceReducer === 0) {
+      warnings.push("Marriage allowance has been ignored because the recipient appears to be above the basic rate limit in this scenario.");
     }
     if (context.taxableProfit === 0 && inputs.companyProfit > 0) {
       warnings.push("Company taxable profit has been fully relieved by salary, pension, mileage and deductions.");
