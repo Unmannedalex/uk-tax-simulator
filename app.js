@@ -167,9 +167,9 @@
     }
   };
 
-  const state = loadState();
+  const state = hasDomAccess() ? loadState() : structuredClone(DEFAULT_STATE);
 
-  const refs = {
+  const refs = hasDomAccess() ? {
     taxYear: document.getElementById("taxYear"),
     shareScenario: document.getElementById("shareScenario"),
     singleModeButton: document.getElementById("singleModeButton"),
@@ -184,9 +184,11 @@
     scenarioTabB: document.getElementById("scenarioTabB"),
     primaryInputs: document.getElementById("primaryInputs"),
     advancedInputs: document.getElementById("advancedInputs")
-  };
+  } : {};
 
-  init();
+  if (hasDomAccess()) {
+    init();
+  }
 
   function init() {
     populateTaxYears();
@@ -368,24 +370,24 @@
       { label: "Marginal rate", value: formatPercent(result.marginalRate), note: "Estimated on the next £1 of company profit extracted." }
     ].map(renderSummaryCard).join("");
 
-    const taxRows = [
-      ["Income tax", result.incomeTax.total],
-      ["Dividend tax", result.dividendTax.total],
-      ["Employee NI", result.employeeNi],
-      ["Employer NI", result.employerNi],
-      ["Corporation tax", result.corporationTax.tax]
-    ].map(([name, amount]) => `<tr><td>${name}</td><td>${formatCurrency(amount)}</td></tr>`).join("");
-
-    const bandRows = [
-      ...result.incomeTax.bands.map((band) => `<tr><td>Income tax ${band.name}</td><td>${formatCurrency(band.tax)}</td></tr>`),
-      `<tr><td>Marriage allowance reducer</td><td>${formatSignedCurrency(-result.marriageAllowanceReducer)}</td></tr>`,
-      ...result.dividendTax.bands.map((band) => `<tr><td>Dividend tax ${band.name}</td><td>${formatCurrency(band.tax)}</td></tr>`)
-    ].join("");
-
     const suggestions = result.optimisationSuggestions.map((item) => `<li>${item}</li>`).join("");
     const warnings = result.warnings.length
       ? `<div><p class="eyebrow">Scenario warnings</p><ul class="warning-list">${result.warnings.map((item) => `<li>${item}</li>`).join("")}</ul></div>`
       : "";
+    const taxRows = [
+      ["Company pays this: Corporation tax", result.corporationTax.tax],
+      ["Company pays this: Employer NI", result.employerNi],
+      ["You pay this: Income tax", result.incomeTax.total],
+      ["You pay this: Dividend tax", result.dividendTax.total],
+      ["You pay this: Employee NI", result.employeeNi]
+    ].map(([name, amount]) => `<tr><td>${name}</td><td>${formatCurrency(amount)}</td></tr>`).join("");
+
+    const bandRows = [
+      ...result.incomeTax.bands.map((band) => `<tr><td>Income tax ${band.name}</td><td>${formatCurrency(band.amount)}</td><td>${formatPercent(band.rate)}</td><td>${formatCurrency(band.tax)}</td></tr>`),
+      `<tr><td>Marriage allowance reducer</td><td>${formatCurrency(result.marriageAllowanceReducer / 0.2 || 0)}</td><td>20.0%</td><td>${formatSignedCurrency(-result.marriageAllowanceReducer)}</td></tr>`,
+      `<tr><td>Dividend allowance</td><td>${formatCurrency(result.dividendTax.allowance.amount)}</td><td>0.0%</td><td>${formatCurrency(0)}</td></tr>`,
+      ...result.dividendTax.bands.map((band) => `<tr><td>Dividend tax ${band.name}</td><td>${formatCurrency(band.amount)}</td><td>${formatPercent(band.rate)}</td><td>${formatCurrency(band.tax)}</td></tr>`)
+    ].join("");
 
     return `
       <section class="metrics-section">
@@ -393,39 +395,20 @@
           <p class="eyebrow">Scenario ${label}</p>
           <div class="summary-grid">${summaryCards}</div>
         </div>
+        ${renderHowItWorksMarkup(result)}
+        ${renderFlowMarkup(result)}
         <table class="breakdown-table">
           <thead><tr><th>Total tax breakdown</th><th>Amount</th></tr></thead>
           <tbody>${taxRows}</tbody>
         </table>
         <table class="breakdown-table">
-          <thead><tr><th>By band</th><th>Tax</th></tr></thead>
+          <thead><tr><th>By band</th><th>Amount</th><th>Rate</th><th>Tax</th></tr></thead>
           <tbody>${bandRows}</tbody>
         </table>
-        <table class="breakdown-table">
-          <thead><tr><th>Take-home summary</th><th>Amount</th></tr></thead>
-          <tbody>
-            <tr><td>Salary after sacrifice</td><td>${formatCurrency(result.salaryAfterSacrifice)}</td></tr>
-            <tr><td>Dividends used in model</td><td>${formatCurrency(result.actualDividends)}</td></tr>
-            <tr><td>Tax-free mileage claim</td><td>${formatCurrency(result.mileageClaim)}</td></tr>
-            <tr><td>Other personal income</td><td>${formatCurrency(result.personalOtherIncome)}</td></tr>
-            <tr><td>Gross economic value</td><td>${formatCurrency(result.grossIncome)}</td></tr>
-            <tr><td>Income tax</td><td>${formatCurrency(result.incomeTax.total)}</td></tr>
-            <tr><td>Marriage allowance reducer</td><td>${formatCurrency(result.marriageAllowanceReducer)}</td></tr>
-            <tr><td>Employee NI</td><td>${formatCurrency(result.employeeNi)}</td></tr>
-            <tr><td>Dividend tax</td><td>${formatCurrency(result.dividendTax.total)}</td></tr>
-            <tr><td>Personal pension</td><td>${formatCurrency(result.inputs.pensionPersonal)}</td></tr>
-            <tr><td>Net take-home</td><td>${formatCurrency(result.netTakeHome)}</td></tr>
-          </tbody>
-        </table>
-        <table class="breakdown-table">
-          <thead><tr><th>Company position</th><th>Amount</th></tr></thead>
-          <tbody>
-            <tr><td>Taxable profit after deductions</td><td>${formatCurrency(result.taxableProfit)}</td></tr>
-            <tr><td>Corporation tax rate</td><td>${formatPercent(result.corporationTax.rate)}</td></tr>
-            <tr><td>Post-tax profits available for dividends</td><td>${formatCurrency(result.maxDividendsAvailable)}</td></tr>
-            <tr><td>Undistributed post-tax profits</td><td>${formatCurrency(result.undistributedProfit)}</td></tr>
-          </tbody>
-        </table>
+        <div class="position-grid">
+          ${renderCompanyPositionMarkup(result)}
+          ${renderPersonalPositionMarkup(result)}
+        </div>
         ${warnings}
         <div>
           <p class="eyebrow">Optimisation suggestions</p>
@@ -442,6 +425,95 @@
         <p class="summary-value">${item.value}</p>
         <p class="summary-note">${item.note}</p>
       </article>
+    `;
+  }
+
+  function renderHowItWorksMarkup(result) {
+    return `
+      <section class="info-box">
+        <p class="eyebrow">How it works</p>
+        <p class="info-title">Company tax happens before dividend extraction.</p>
+        <p class="info-copy">
+          Start with company profit, deduct salary, employer pension and company expenses to reach taxable profit, then apply corporation tax.
+          Dividends are only paid from the ${formatCurrency(result.postTaxProfit)} left after corporation tax, so they do not reduce corporation tax.
+        </p>
+      </section>
+    `;
+  }
+
+  function renderFlowMarkup(result) {
+    const flowSteps = [
+      { title: "Company Profit", value: formatCurrency(result.inputs.companyProfit), note: "Starting profit before director payments." },
+      { title: "Less Salary / Expenses", value: formatCurrency(result.totalCompanyDeductions), note: "Salary, employer NI, pension, EV cost, mileage and company expenses." },
+      { title: "Taxable Profit", value: formatCurrency(result.taxableProfit), note: "Company profit chargeable to corporation tax." },
+      { title: "Company pays Corporation Tax", value: formatCurrency(result.corporationTax.tax), note: `${formatPercent(result.corporationTax.rate)} effective corporation tax rate.` },
+      { title: "Post-tax Profit", value: formatCurrency(result.postTaxProfit), note: "This is the dividend pool." },
+      { title: "Dividends Extracted", value: formatCurrency(result.actualDividends), note: "Paid from post-tax profit only." },
+      { title: "Personal Income", value: formatCurrency(result.totalIncome), note: "Salary, dividends, EV benefit and other taxable income." },
+      { title: "You pay tax / NI", value: formatCurrency(result.personalTaxes), note: "Income tax, dividend tax and employee NI." },
+      { title: "Net Take-home", value: formatCurrency(result.netTakeHome), note: "Cash after personal tax and personal pension." }
+    ];
+
+    return `
+      <section class="flow-section">
+        <p class="eyebrow">Company to personal flow</p>
+        <div class="flow-grid">
+          ${flowSteps.map((step, index) => `
+            <article class="flow-card">
+              <p class="summary-label">${step.title}</p>
+              <p class="summary-value">${step.value}</p>
+              <p class="summary-note">${step.note}</p>
+              ${index < flowSteps.length - 1 ? '<div class="flow-arrow" aria-hidden="true">↓</div>' : ""}
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderCompanyPositionMarkup(result) {
+    return `
+      <table class="breakdown-table">
+        <thead><tr><th>Company Position</th><th>Amount</th></tr></thead>
+        <tbody>
+          <tr><td>Starting company profit</td><td>${formatCurrency(result.inputs.companyProfit)}</td></tr>
+          <tr><td>Director salary cost</td><td>${formatCurrency(result.salaryAfterSacrifice)}</td></tr>
+          <tr><td>Employer NI</td><td>${formatCurrency(result.employerNi)}</td></tr>
+          <tr><td>Employer pension</td><td>${formatCurrency(result.inputs.pensionEmployer)}</td></tr>
+          <tr><td>Other deductible company costs</td><td>${formatCurrency(result.otherCompanyDeductions)}</td></tr>
+          <tr><td>Taxable profit</td><td>${formatCurrency(result.taxableProfit)}</td></tr>
+          <tr><td>Company pays this: Corporation tax</td><td>${formatCurrency(result.corporationTax.tax)}</td></tr>
+          <tr><td>Post-tax profit available for dividends</td><td>${formatCurrency(result.maxDividendsAvailable)}</td></tr>
+          <tr><td>Dividends extracted</td><td>${formatCurrency(result.actualDividends)}</td></tr>
+          <tr><td>Retained post-tax profit</td><td>${formatCurrency(result.undistributedProfit)}</td></tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderPersonalPositionMarkup(result) {
+    const breakEvenMarkup = result.dividendBreakEven
+      ? `<p class="break-even-note">${result.dividendBreakEven}</p>`
+      : "";
+
+    return `
+      <table class="breakdown-table">
+        <thead><tr><th>Personal Position</th><th>Amount</th></tr></thead>
+        <tbody>
+          <tr><td>Salary after sacrifice</td><td>${formatCurrency(result.salaryAfterSacrifice)}</td></tr>
+          <tr><td>Dividends received</td><td>${formatCurrency(result.actualDividends)}</td></tr>
+          <tr><td>Other taxable income</td><td>${formatCurrency(result.personalOtherIncome + result.evBenefit)}</td></tr>
+          <tr><td>Total income</td><td>${formatCurrency(result.totalIncome)}</td></tr>
+          <tr><td>Adjusted net income</td><td>${formatCurrency(result.adjustedNetIncome)}</td></tr>
+          <tr><td>Personal allowance</td><td>${formatCurrency(result.personalAllowance)}</td></tr>
+          <tr><td>You pay this: Income tax</td><td>${formatCurrency(result.incomeTax.total)}</td></tr>
+          <tr><td>You pay this: Dividend tax</td><td>${formatCurrency(result.dividendTax.total)}</td></tr>
+          <tr><td>You pay this: Employee NI</td><td>${formatCurrency(result.employeeNi)}</td></tr>
+          <tr><td>Personal pension contribution</td><td>${formatCurrency(result.inputs.pensionPersonal)}</td></tr>
+          <tr><td>Net take-home</td><td>${formatCurrency(result.netTakeHome)}</td></tr>
+        </tbody>
+      </table>
+      ${breakEvenMarkup}
     `;
   }
 
@@ -466,19 +538,22 @@
     const mileageClaim = calculateMileageClaim(inputs.businessMiles, config);
     const employeeNi = calculateEmployeeNi(salaryAfterSacrifice, config);
     const employerNi = calculateEmployerNi(salaryAfterSacrifice, config);
-    const deductibleExpenses = inputs.otherDeductions + inputs.professionalSubscriptions + inputs.pensionEmployer + inputs.evLeaseCost + mileageClaim + salaryAfterSacrifice + employerNi;
-    const taxableProfit = Math.max(0, inputs.companyProfit - deductibleExpenses);
+    const otherCompanyDeductions = inputs.otherDeductions + inputs.professionalSubscriptions + inputs.evLeaseCost + mileageClaim;
+    const totalCompanyDeductions = otherCompanyDeductions + inputs.pensionEmployer + salaryAfterSacrifice + employerNi;
+    const taxableProfit = Math.max(0, inputs.companyProfit - totalCompanyDeductions);
     const corporationTax = calculateCorporationTax(taxableProfit, config);
-    const maxDividendsAvailable = Math.max(0, taxableProfit - corporationTax.tax);
+    const postTaxProfit = Math.max(0, taxableProfit - corporationTax.tax);
+    const maxDividendsAvailable = postTaxProfit;
     const actualDividends = Math.min(inputs.dividends, maxDividendsAvailable);
     const personalOtherIncome = inputs.interestIncome + inputs.rentalIncome + inputs.otherIncome;
     const grossTaxableIncome = salaryAfterSacrifice + evBenefit + personalOtherIncome;
-    const adjustedNetIncome = Math.max(0, grossTaxableIncome + actualDividends - grossedUpPersonalPension(inputs.pensionPersonal) - inputs.giftAid);
+    const totalIncome = grossTaxableIncome + actualDividends;
+    const adjustedNetIncome = Math.max(0, totalIncome - grossedUpPersonalPension(inputs.pensionPersonal) - inputs.giftAid);
     const personalAllowance = Math.max(0, Math.min(config.personalAllowance, calculatePersonalAllowance(config, adjustedNetIncome)));
     const basicBandExtension = grossedUpPersonalPension(inputs.pensionPersonal) + inputs.giftAid;
     const incomeTax = calculateIncomeTax(grossTaxableIncome, personalAllowance, config, basicBandExtension);
     const dividendTax = calculateDividendTax(actualDividends, grossTaxableIncome, personalAllowance, config, basicBandExtension);
-    const marriageAllowanceReducer = calculateMarriageAllowanceReducer(inputs, config, grossTaxableIncome + actualDividends, basicBandExtension);
+    const marriageAllowanceReducer = calculateMarriageAllowanceReducer(inputs, config, totalIncome, basicBandExtension);
     incomeTax.total = Math.max(0, incomeTax.total - marriageAllowanceReducer);
     const grossIncome = salaryAfterSacrifice + actualDividends + personalOtherIncome + mileageClaim + inputs.pensionEmployer + evBenefit;
     const cashTakeHomeBeforeTax = salaryAfterSacrifice + actualDividends + personalOtherIncome + mileageClaim;
@@ -486,6 +561,7 @@
     const netTakeHome = cashTakeHomeBeforeTax - incomeTax.total - employeeNi - dividendTax.total - inputs.pensionPersonal;
     const effectiveTaxRate = grossIncome > 0 ? totalTax / grossIncome : 0;
     const undistributedProfit = Math.max(0, maxDividendsAvailable - actualDividends);
+    const personalTaxes = incomeTax.total + dividendTax.total + employeeNi;
     const warnings = buildWarnings(inputs, config, {
       salaryAfterSacrifice,
       maxDividendsAvailable,
@@ -503,11 +579,18 @@
       corporationTax,
       mileageClaim,
       evBenefit,
+      postTaxProfit,
       salaryAfterSacrifice,
       actualDividends,
       maxDividendsAvailable,
       undistributedProfit,
       personalOtherIncome,
+      totalIncome,
+      adjustedNetIncome,
+      personalAllowance,
+      personalTaxes,
+      otherCompanyDeductions,
+      totalCompanyDeductions,
       marriageAllowanceReducer,
       grossIncome,
       cashTakeHomeBeforeTax,
@@ -519,10 +602,11 @@
     };
 
     if (options.skipEnhancements) {
-      return { ...result, marginalRate: 0, optimisationSuggestions: [] };
+      return { ...result, marginalRate: 0, optimisationSuggestions: [], dividendBreakEven: describeDividendBreakEven(result.dividendTax) };
     }
 
     result.marginalRate = estimateMarginalRate(inputs, config);
+    result.dividendBreakEven = describeDividendBreakEven(result.dividendTax);
     result.optimisationSuggestions = buildSuggestions(inputs, config, result);
     return result;
   }
@@ -543,27 +627,41 @@
   }
 
   function calculateDividendTax(dividends, nonDividendIncome, personalAllowance, config, basicBandExtension) {
-    let remainingAllowance = Math.max(0, personalAllowance - nonDividendIncome);
-    let taxableDividends = Math.max(0, dividends - remainingAllowance - config.dividendAllowance);
+    const dividendsCoveredByPersonalAllowance = Math.min(dividends, Math.max(0, personalAllowance - nonDividendIncome));
+    const dividendsAfterPersonalAllowance = Math.max(0, dividends - dividendsCoveredByPersonalAllowance);
     const taxableNonDividend = Math.max(0, nonDividendIncome - personalAllowance);
-    const basicLimit = config.incomeBands[0].upper - config.personalAllowance + basicBandExtension;
-    const higherLimit = config.incomeBands[1].upper - config.personalAllowance + basicBandExtension;
-    const basicRemaining = Math.max(0, basicLimit - taxableNonDividend);
-    const higherRemaining = Math.max(0, higherLimit - taxableNonDividend - basicRemaining);
-
-    const basicAmount = Math.min(taxableDividends, basicRemaining);
-    taxableDividends -= basicAmount;
-    const higherAmount = Math.min(taxableDividends, higherRemaining);
-    taxableDividends -= higherAmount;
-    const additionalAmount = Math.max(0, taxableDividends);
-
-    const bands = [
-      { name: "Basic", amount: basicAmount, rate: config.dividendBands[0].rate, tax: basicAmount * config.dividendBands[0].rate },
-      { name: "Higher", amount: higherAmount, rate: config.dividendBands[1].rate, tax: higherAmount * config.dividendBands[1].rate },
-      { name: "Additional", amount: additionalAmount, rate: config.dividendBands[2].rate, tax: additionalAmount * config.dividendBands[2].rate }
+    const taxableBandCapacities = [
+      { name: "Basic", capacity: Math.max(0, (config.incomeBands[0].upper + basicBandExtension) - personalAllowance), rate: config.dividendBands[0].rate },
+      { name: "Higher", capacity: Math.max(0, config.incomeBands[1].upper - config.incomeBands[0].upper), rate: config.dividendBands[1].rate },
+      { name: "Additional", capacity: Infinity, rate: config.dividendBands[2].rate }
     ];
+    const availableBands = taxableBandCapacities.map((band) => ({ ...band }));
+    let remainingNonDividend = taxableNonDividend;
 
-    return { total: bands.reduce((sum, band) => sum + band.tax, 0), bands };
+    availableBands.forEach((band) => {
+      if (remainingNonDividend <= 0 || !Number.isFinite(band.capacity) && band.capacity !== Infinity) return;
+      if (band.capacity === Infinity) return;
+      const consumed = Math.min(band.capacity, remainingNonDividend);
+      band.capacity -= consumed;
+      remainingNonDividend -= consumed;
+    });
+
+    const allowanceAmount = Math.min(config.dividendAllowance, dividendsAfterPersonalAllowance);
+    const allowanceUsage = allocateAcrossBands(allowanceAmount, availableBands);
+    const bands = allocateAcrossBands(Math.max(0, dividendsAfterPersonalAllowance - allowanceAmount), availableBands)
+      .map((band, index) => ({
+        name: band.name,
+        amount: band.amount,
+        rate: config.dividendBands[index].rate,
+        tax: band.amount * config.dividendBands[index].rate
+      }));
+
+    return {
+      total: bands.reduce((sum, band) => sum + band.tax, 0),
+      allowance: { amount: allowanceAmount, coveredByPersonalAllowance: dividendsCoveredByPersonalAllowance, allocations: allowanceUsage },
+      bands,
+      remainingBandCapacity: availableBands.map((band) => ({ name: band.name, capacity: band.capacity }))
+    };
   }
 
   function calculateEmployeeNi(salary, config) {
@@ -731,6 +829,7 @@
   }
 
   function loadState() {
+    if (!hasDomAccess()) return structuredClone(DEFAULT_STATE);
     const params = new URLSearchParams(window.location.search);
     const encoded = params.get("state");
     if (!encoded) return structuredClone(DEFAULT_STATE);
@@ -751,6 +850,46 @@
 
   function createTaxYearConfig(config) {
     return config;
+  }
+
+  function allocateAcrossBands(amount, bands) {
+    let remaining = amount;
+    return bands.map((band) => {
+      const available = band.capacity === Infinity ? remaining : Math.max(0, band.capacity);
+      const allocated = Math.min(remaining, available);
+      if (band.capacity !== Infinity) {
+        band.capacity -= allocated;
+      }
+      remaining -= allocated;
+      return { name: band.name, amount: allocated };
+    });
+  }
+
+  function describeDividendBreakEven(dividendTax) {
+    const basicBand = dividendTax.bands.find((band) => band.name === "Basic");
+    const higherBand = dividendTax.bands.find((band) => band.name === "Higher");
+    const additionalBand = dividendTax.bands.find((band) => band.name === "Additional");
+    const remainingBasic = dividendTax.remainingBandCapacity.find((band) => band.name === "Basic")?.capacity || 0;
+    const remainingHigher = dividendTax.remainingBandCapacity.find((band) => band.name === "Higher")?.capacity || 0;
+
+    if (additionalBand && additionalBand.amount > 0) {
+      return "Extra dividends are already in the additional-rate band at 39.35%.";
+    }
+    if (higherBand && higherBand.amount > 0) {
+      return remainingHigher > 0
+        ? `Another ${formatCurrency(remainingHigher)} of dividends stays in the higher-rate band before additional-rate tax starts.`
+        : "The next £1 of dividends moves into the additional-rate band at 39.35%.";
+    }
+    if (basicBand && basicBand.amount > 0) {
+      return remainingBasic > 0
+        ? `Another ${formatCurrency(remainingBasic)} of dividends stays in the basic-rate band before higher-rate tax starts.`
+        : "The next £1 of dividends moves into the higher-rate band at 33.75%.";
+    }
+    return "No taxable dividends are currently being charged.";
+  }
+
+  function hasDomAccess() {
+    return typeof window !== "undefined" && typeof document !== "undefined";
   }
 
   function createDefaultScenario() {
@@ -808,5 +947,16 @@
 
   function formatNumber(value) {
     return new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(value || 0);
+  }
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+      TAX_YEARS,
+      calculateScenario,
+      calculateDividendTax,
+      calculateIncomeTax,
+      calculatePersonalAllowance,
+      createDefaultScenario
+    };
   }
 })();
