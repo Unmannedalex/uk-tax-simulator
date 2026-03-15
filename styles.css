@@ -294,12 +294,12 @@ label span,
 }
 
 .tax-wedge-card {
-  padding: 0.25rem 0;
+  padding: 0;
 }
 
 .tax-wedge-bar {
   display: flex;
-  min-height: 100px;
+  height: 56px;
   overflow: hidden;
   border: 3px solid var(--line);
   border-radius: 18px;
@@ -309,11 +309,9 @@ label span,
 
 .tax-wedge-segment {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 60px;
-  padding: 0.75rem;
+  min-width: 50px;
   border-right: 3px solid var(--line);
   font-weight: 700;
   text-align: center;
@@ -323,14 +321,11 @@ label span,
   border-right: 0;
 }
 
-.tax-wedge-label {
-  font-size: 0.9rem;
-  margin-bottom: 0.25rem;
-}
-
-.tax-wedge-value {
-  font-size: 1.1rem;
+.tax-wedge-percent {
+  font-size: 1rem;
   font-family: "IBM Plex Mono", monospace;
+  color: #fff;
+  text-shadow: 1px 1px 0 #111;
 }
 
 .chart-legend {
